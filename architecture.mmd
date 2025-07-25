@@ -1,0 +1,28 @@
+graph TB
+    subgraph "Go Application"
+        A[Go App] --> B[OpenTelemetry SDK]
+        B --> C[OTLP Exporter]
+    end
+    
+    subgraph "OpenTelemetry Collector"
+        D[OTLP Receiver] --> E[Batch Processor]
+        E --> F[Prometheus Exporter]
+        E --> G[OTLP Exporter]
+    end
+    
+    subgraph "Observability Stack"
+        H[Prometheus]
+        I[Jaeger]
+        J[Grafana]
+    end
+    
+    C --> D
+    F --> H
+    G --> I
+    H --> J
+    
+    style A fill:#e1f5fe
+    style D fill:#f3e5f5
+    style H fill:#fff3e0
+    style I fill:#e8f5e8
+    style J fill:#fce4ec 
