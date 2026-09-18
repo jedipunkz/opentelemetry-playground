@@ -1,0 +1,64 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # memory_limiter は必ず先頭に置く。
+  # 流量が跳ねたときに Collector 自身が OOM で落ちるのを防ぐ。
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # アプリを再ビルドせずに属性を足せるのが Collector を挟む利点。
+  resource/env:
+    attributes:
+      - key: deployment.environment.name
+        value: local
+        action: upsert
+
+  # OTTL でスパン属性を加工する。ここでは機密情報になりうるキーを落とす。
+  transform/redact:
+    error_mode: ignore
+    trace_statements:
+      - delete_key(span.attributes, "user.email")
+
+  # batch は最後に置く。送信回数を減らしスループットを上げる。
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  # v0.161.0 時点で otlp は otlp_grpc のエイリアス扱いになり、非推奨警告が出る。
+  otlp_grpc/lgtm:
+    endpoint: lgtm:4317
+    tls:
+      insecure: true
+
+  # 受信した内容を Collector のログに出す。設定の切り分けに使う。
+  debug:
+    verbosity: normal
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/env, transform/redact, batch]
+      exporters: [otlp_grpc/lgtm, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/env, batch]
+      exporters: [otlp_grpc/lgtm]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/env, batch]
+      exporters: [otlp_grpc/lgtm]
